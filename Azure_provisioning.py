@@ -104,7 +104,7 @@ def gestione_creazione_azure():
         st.markdown("**Nota**: il campo “Data Fine” deve essere inserito in Azure come “EmployeeHireDate”.")
 
         # Selezione licenze e SM
-        st.markdown("**Aggiungere Gruppo**\n- O365 Exchange Base CLOUD")
+        st.markdown("**Aggiungere Gruppo**\n- O365 Teams Base")
         if casella_personale and sm_list:
             st.markdown("**Profilare su SM:**")
             for sm in sm_list:
