@@ -156,7 +156,7 @@ def formatta_data(data: str) -> str:
     if not data:
         return ""
 
-    for separatore in ["-", "/"\]:
+    for separatore in ["-", "/"]:
         try:
             giorno, mese, anno = map(
                 int,
@@ -388,7 +388,7 @@ def gestione_creazione_azure():
 
         secondo_cognome = format_name(
             st.text_input(
-               "Secondo Cognome",
+                "Secondo Cognome",
                 key="SecondoCognome_Azure"
             )
         )
