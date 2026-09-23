@@ -20,10 +20,12 @@ st.set_page_config(
 # ------------------------------------------------------------
 def load_config_from_bytes(data: bytes):
     """
-    Legge dal foglio 'Cloud Only' esclusivamente i gruppi
-    configurati con Section = Defaults e Tipo = PEL.
+    Legge dal foglio 'Cloud Only' esclusivamente i gruppi con:
 
-    Struttura richiesta:
+    Section = Defaults
+    Tipo = PEL
+
+    Struttura prevista:
     Section | Key/App | Label/Gruppi/Value | Tipo
     """
 
@@ -47,9 +49,9 @@ def load_config_from_bytes(data: bytes):
     ]
 
     missing_columns = [
-        colonna
-        for colonna in required_columns
-        if colonna not in cfg.columns
+        column
+        for column in required_columns
+        if column not in cfg.columns
     ]
 
     if missing_columns:
@@ -58,18 +60,16 @@ def load_config_from_bytes(data: bytes):
             + ", ".join(missing_columns)
         )
 
-    # Normalizzazione
-    for colonna in required_columns:
-        cfg[colonna] = (
-            cfg[colonna]
+    # Normalizzazione dei valori
+    for column in required_columns:
+        cfg[column] = (
+            cfg[column]
             .fillna("")
             .astype(str)
             .str.strip()
         )
 
-    # Recupera esclusivamente le righe:
-    # Section = Defaults
-    # Tipo = PEL
+    # Seleziona esclusivamente le righe PEL del foglio Cloud Only
     pel_df = cfg[
         (cfg["Section"].str.upper() == "DEFAULTS")
         & (cfg["Tipo"].str.upper() == "PEL")
@@ -78,28 +78,28 @@ def load_config_from_bytes(data: bytes):
     gruppi_pel = {}
 
     for _, row in pel_df.iterrows():
-        chiave = str(row["Key/App"]).strip().lower()
-        gruppo = str(row["Label/Gruppi/Value"]).strip()
+        key = str(row["Key/App"]).strip().lower()
+        value = str(row["Label/Gruppi/Value"]).strip()
 
-        if chiave and gruppo:
-            gruppi_pel[chiave] = gruppo
+        if key and value:
+            gruppi_pel[key] = value
 
     # Verifica delle due configurazioni obbligatorie
-    chiavi_obbligatorie = [
+    required_keys = [
         "teams_base",
         "exchange_base_cloud"
     ]
 
-    chiavi_mancanti = [
-        chiave
-        for chiave in chiavi_obbligatorie
-        if chiave not in gruppi_pel
+    missing_keys = [
+        key
+        for key in required_keys
+        if key not in gruppi_pel
     ]
 
-    if chiavi_mancanti:
+    if missing_keys:
         raise ValueError(
-            "Nel foglio 'Cloud Only' mancano queste configurazioni PEL: "
-            + ", ".join(chiavi_mancanti)
+            "Nel foglio 'Cloud Only' mancano le configurazioni PEL: "
+            + ", ".join(missing_keys)
         )
 
     return gruppi_pel
@@ -110,7 +110,8 @@ def load_config_from_bytes(data: bytes):
 # ------------------------------------------------------------
 def normalize_name(value: str) -> str:
     """
-    Rimuove accenti, spazi e apostrofi.
+    Rimuove accenti, spazi e apostrofi per la generazione
+    dell'utenza.
 
     Esempi:
     D'Angelo -> dangelo
@@ -134,15 +135,15 @@ def normalize_name(value: str) -> str:
 
 def format_name(value: str) -> str:
     """
-    Mantiene correttamente nomi composti e apostrofi.
+    Formatta il nome mantenendo eventuali parole separate.
     """
 
     if not value:
         return ""
 
     return " ".join(
-        parola.capitalize()
-        for parola in value.strip().split()
+        word.capitalize()
+        for word in value.strip().split()
     )
 
 
@@ -185,10 +186,12 @@ def genera_samaccountname(
     esterno: bool = False
 ) -> str:
     """
+    Genera il sAMAccountName.
+
     Per le utenze esterne:
-    - parte iniziale massimo 16 caratteri
+    - parte base massimo 16 caratteri
     - suffisso .ext
-    - massimo complessivo 20 caratteri
+    - lunghezza complessiva massima 20 caratteri
     """
 
     n = normalize_name(nome)
@@ -199,22 +202,25 @@ def genera_samaccountname(
     suffix = ".ext" if esterno else ""
     limit = 16 if esterno else 20
 
-    # Nome completo
-    candidato_1 = f"{n}{sn}.{c}{sc}"
+    # Tentativo 1:
+    # nome + secondo nome + cognome + secondo cognome
+    candidate_1 = f"{n}{sn}.{c}{sc}"
 
-    if len(candidato_1) <= limit:
-        return candidato_1 + suffix
+    if len(candidate_1) <= limit:
+        return candidate_1 + suffix
 
-    # Iniziale nome + iniziale secondo nome + cognomi
-    candidato_2 = f"{n[:1]}{sn[:1]}.{c}{sc}"
+    # Tentativo 2:
+    # iniziale nome + iniziale secondo nome + cognomi
+    candidate_2 = f"{n[:1]}{sn[:1]}.{c}{sc}"
 
-    if len(candidato_2) <= limit:
-        return candidato_2 + suffix
+    if len(candidate_2) <= limit:
+        return candidate_2 + suffix
 
-    # Iniziale nome + iniziale secondo nome + primo cognome
-    candidato_3 = f"{n[:1]}{sn[:1]}.{c}"
+    # Tentativo 3:
+    # iniziali nomi + primo cognome, troncato
+    candidate_3 = f"{n[:1]}{sn[:1]}.{c}"
 
-    return candidato_3[:limit] + suffix
+    return candidate_3[:limit] + suffix
 
 
 def build_full_name(
@@ -225,8 +231,9 @@ def build_full_name(
     esterno: bool = False
 ) -> str:
     """
-    Formato:
-    Cognome Secondo Cognome Nome Secondo Nome
+    Restituisce il nome nel formato:
+
+    Cognome SecondoCognome Nome SecondoNome
     """
 
     parts = [
@@ -237,9 +244,9 @@ def build_full_name(
     ]
 
     full_name = " ".join(
-        parte
-        for parte in parts
-        if parte
+        part
+        for part in parts
+        if part
     )
 
     if esterno and full_name:
@@ -250,7 +257,7 @@ def build_full_name(
 
 def normalizza_shared_mailbox(value: str) -> str:
     """
-    Se è presente solo l'alias, aggiunge @consip.it.
+    Se viene inserito solo l'alias aggiunge @consip.it.
     Se è già presente un indirizzo completo, non lo modifica.
     """
 
@@ -267,7 +274,7 @@ def normalizza_shared_mailbox(value: str) -> str:
 
 def escape_markdown_table_value(value: str) -> str:
     """
-    Evita problemi nella tabella Markdown.
+    Evita che il carattere pipe rompa la tabella Markdown.
     """
 
     return str(value).replace("|", "\\|")
@@ -275,7 +282,7 @@ def escape_markdown_table_value(value: str) -> str:
 
 def genera_tabella_markdown(rows):
     """
-    Genera la tabella Markdown Campo/Valore.
+    Genera una tabella Markdown Campo/Valore.
     """
 
     markdown = "| Campo | Valore |\n"
@@ -322,7 +329,7 @@ def gestione_creazione_azure():
         )
         st.stop()
 
-    # I soli due valori letti dal config.xlsx
+    # Unici due valori letti dal config.xlsx
     gruppo_teams_base = gruppi_pel["teams_base"]
     gruppo_exchange_cloud = gruppi_pel["exchange_base_cloud"]
 
@@ -381,7 +388,7 @@ def gestione_creazione_azure():
 
         secondo_cognome = format_name(
             st.text_input(
-                "Secondo Cognome",
+               "Secondo Cognome",
                 key="SecondoCognome_Azure"
             )
         )
@@ -455,3 +462,220 @@ def gestione_creazione_azure():
         # ----------------------------------------------------
         # Generazione campi
         # ----------------------------------------------------
+        sam_account_name = genera_samaccountname(
+            nome=nome,
+            cognome=cognome,
+            secondo_nome=secondo_nome,
+            secondo_cognome=secondo_cognome,
+            esterno=True
+        )
+
+        telefono_formattato = (
+            f"+39 {telefono_aziendale}"
+            if telefono_aziendale
+            else ""
+        )
+
+        display_name = build_full_name(
+            cognome=cognome,
+            secondo_cognome=secondo_cognome,
+            nome=nome,
+            secondo_nome=secondo_nome,
+            esterno=True
+        )
+
+        name_formattato = build_full_name(
+            cognome=cognome,
+            secondo_cognome=secondo_cognome,
+            nome=nome,
+            secondo_nome=secondo_nome,
+            esterno=False
+        )
+
+        given_name = " ".join(
+            filter(
+                None,
+                [nome, secondo_nome]
+            )
+        )
+
+        surname = " ".join(
+            filter(
+                None,
+                [cognome, secondo_cognome]
+            )
+        )
+
+        email_consip = (
+            f"{sam_account_name}@consip.it"
+        )
+
+        data_fine_formattata = formatta_data(
+            data_fine
+        )
+
+        # ----------------------------------------------------
+        # Tabella richiesta
+        # ----------------------------------------------------
+        table = [
+            ["Tipo Utenza", "Azure"],
+            ["Utenza", sam_account_name],
+            ["Alias", sam_account_name],
+            ["Name", name_formattato],
+            ["DisplayName", display_name],
+            ["cn", display_name],
+            ["GivenName", given_name],
+            ["Surname", surname],
+            ["Email aziendale", email_aziendale],
+            ["Manager", manager],
+            ["Cell", telefono_formattato],
+            ["Data Fine (mm/gg/aaaa)", data_fine_formattata],
+            ["Codice Fiscale", cf]
+        ]
+
+        if casella_personale:
+            table.append(
+                ["e-mail Consip", email_consip]
+            )
+
+        st.divider()
+        st.subheader("Anteprima richiesta Azure")
+
+        st.markdown(
+            "Ciao, si richiede la definizione di un’utenza "
+            "Azure come sotto indicato."
+        )
+
+        st.markdown(
+            genera_tabella_markdown(table)
+        )
+
+        st.markdown(
+            "**Nota:** il campo “Data Fine” deve essere "
+            "inserito in Azure come “EmployeeHireDate”."
+        )
+
+        # ----------------------------------------------------
+        # Selezione gruppo PEL
+        # ----------------------------------------------------
+        st.markdown("### Aggiungere gruppo")
+
+        if casella_personale:
+            gruppo_da_aggiungere = gruppo_exchange_cloud
+        else:
+            gruppo_da_aggiungere = gruppo_teams_base
+
+        st.markdown(
+            f"- **{gruppo_da_aggiungere}**"
+        )
+
+        # ----------------------------------------------------
+        # Profilazione Shared Mailbox
+        # ----------------------------------------------------
+        if casella_personale and sm_list:
+            st.markdown(
+                "### Profilare sulle Shared Mailbox"
+            )
+
+            for sm in sm_list:
+                st.markdown(f"- {sm}")
+
+        # ----------------------------------------------------
+        # MFA
+        # ----------------------------------------------------
+        st.markdown(
+            """
+### MFA
+
+Aggiungere all’utenza la MFA.  
+Gli utenti verranno contattati per supporto MFA da imac@consip.it.
+
+Grazie
+"""
+        )
+
+        # ----------------------------------------------------
+        # Riassegnazione ticket
+        # ----------------------------------------------------
+        st.divider()
+
+        st.markdown(
+            f"""
+### Riassegnazione ticket
+
+Definita l’utenza bisogna riassegnare il ticket con:
+
+- **Tipologia:** Software di produttività individuale
+- **Descrizione:** Microsoft Office - Assistenza
+
+Il testo da utilizzare è il seguente:
+
+Si richiede cortesemente contatto utente per MFA/accesso utente/webmail:
+
+`{name_formattato} – {telefono_formattato} – {email_aziendale}`
+
+Nota: attenzione alla password.
+
+Grazie, ciao.
+"""
+        )
+
+        # ----------------------------------------------------
+        # Collegamenti Webmail
+        # ----------------------------------------------------
+        if casella_personale:
+            st.markdown("### Webmail")
+
+            link_webmail_personale = (
+                f"https://outlook.office.com/mail/{email_consip}"
+            )
+
+            st.markdown(
+                f"- {link_webmail_personale}"
+            )
+
+            for sm in sm_list:
+                link_webmail_sm = (
+                    f"https://outlook.office.com/mail/{sm}"
+                )
+
+                st.markdown(
+                    f"- {link_webmail_sm}"
+                )
+
+        # ----------------------------------------------------
+        # Verifica tecnica
+        # ----------------------------------------------------
+        with st.expander("Verifica tecnica"):
+            st.write(
+                f"**Utenza/Alias:** {sam_account_name}"
+            )
+
+            st.write(
+                f"**Numero caratteri:** "
+                f"{len(sam_account_name)}"
+            )
+
+            st.write(
+                f"**DisplayName/cn:** {display_name}"
+            )
+
+            st.write(
+                f"**GivenName:** {given_name}"
+            )
+
+            st.write(
+                f"**Surname:** {surname}"
+            )
+
+            st.write(
+                f"**Gruppo selezionato:** "
+                f"{gruppo_da_aggiungere}"
+            )
+
+
+# ------------------------------------------------------------
+# Avvio applicazione
+# ------------------------------------------------------------
+if __name__ == "__main__":
+    gestione_creazione_azure()
